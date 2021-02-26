@@ -23,23 +23,24 @@ namespace PSBNebeskyServer
             //socket.Bind(new IPEndPoint(IPAddress.Parse("127.0.0.1"), 49152));
             Console.WriteLine($"Listener opened on {listener.LocalEndpoint}");
             //socket.Listen(1);
-            await ListenForConnection();
+            ListenForConnection();
         }
 
-        public async Task ListenForConnection()
+        public void ListenForConnection()
         {
             while(true)
             {
                 if (client == null)
                 {
                     Console.WriteLine("Awaiting client connection");
-                    client = await listener.AcceptTcpClientAsync();
+                    client = listener.AcceptTcpClient();
                     Console.WriteLine($"Client connected:{client.Client.RemoteEndPoint}");
                 }
                 else
                 {
                     Console.WriteLine("Since client connected I stopped looking for more clients");
-                    await ListenForMessages();
+                    Console.WriteLine("Listening for messages from client");
+                    ListenForMessages();
                     break;
                 }
             }
@@ -47,19 +48,43 @@ namespace PSBNebeskyServer
 
         int messageLenght;
         NetworkStream stream;
-        Byte[] bytes = new byte[256];
+        Byte[] bytes;
         string data;
         RequestHandler handler = new RequestHandler();
 
         public async Task ListenForMessages()
         {
-            Console.WriteLine("Listening for messages from client");
             while (true)
             {
-                stream = client.GetStream();
-                messageLenght = stream.Read(bytes, 0, bytes.Length);
-                data = System.Text.Encoding.ASCII.GetString(bytes);
-                Console.WriteLine(data);
+                if (!client.Connected)
+                {
+                    Console.WriteLine("Client disconnected.");
+                    client.Dispose();
+                    client.Close();
+                    client = null;
+                    listener.Stop();
+                    stream.Close();
+                    StartListener();
+                    break;
+                }
+                else
+                {
+                    data = string.Empty;
+                    bytes = new byte[256];
+                    stream = client.GetStream();
+                    stream.ReadTimeout = 5000;
+                    try
+                    {
+                        messageLenght = stream.Read(bytes, 0, bytes.Length);
+                    }
+                    catch (Exception)
+                    {
+                        ListenForMessages();
+                        throw;
+                    }
+                    data = System.Text.Encoding.ASCII.GetString(bytes);
+                    Console.WriteLine("Value: " + data);
+                }
             }
         }
     }
